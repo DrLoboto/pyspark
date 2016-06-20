@@ -8,6 +8,6 @@ setup(name='pyspark',
     description='PySpark python package',
     long_description='Library provides high-level APIs in Python and an optimized engine that supports general computation graphs for data analysis.',
     install_requires=[
-        'py4j=0.9'
+        'py4j==0.9'
     ],
     packages=find_packages())
