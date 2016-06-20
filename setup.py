@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 
 setup(name='pyspark',
-    version='1.6.1',
+    version='1.6.1.1',
     author='Apache Software Foundation',
     license='Apache License 2.0',
     description='PySpark python package',
