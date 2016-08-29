@@ -39,14 +39,12 @@ else:
 import numpy as np
 
 from pyspark import since
-from pyspark.ml import linalg as newlinalg
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
-           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices',
-           'QRDecomposition']
+           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -148,11 +146,11 @@ class VectorUDT(UserDefinedType):
 
     @classmethod
     def module(cls):
-        return "pyspark.mllib.linalg"
+        return "pyspark.ml.linalg"
 
     @classmethod
     def scalaUDT(cls):
-        return "org.apache.spark.mllib.linalg.VectorUDT"
+        return "org.apache.spark.ml.linalg.VectorUDT"
 
     def serialize(self, obj):
         if isinstance(obj, SparseVector):
@@ -198,11 +196,11 @@ class MatrixUDT(UserDefinedType):
 
     @classmethod
     def module(cls):
-        return "pyspark.mllib.linalg"
+        return "pyspark.ml.linalg"
 
     @classmethod
     def scalaUDT(cls):
-        return "org.apache.spark.mllib.linalg.MatrixUDT"
+        return "org.apache.spark.ml.linalg.MatrixUDT"
 
     def serialize(self, obj):
         if isinstance(obj, SparseMatrix):
@@ -248,15 +246,6 @@ class Vector(object):
         """
         raise NotImplementedError
 
-    def asML(self):
-        """
-        Convert this vector to the new mllib-local representation.
-        This does NOT copy the data; it copies references.
-
-        :return: :py:class:`pyspark.ml.linalg.Vector`
-        """
-        raise NotImplementedError
-
 
 class DenseVector(Vector):
     """
@@ -287,28 +276,6 @@ class DenseVector(Vector):
         if ar.dtype != np.float64:
             ar = ar.astype(np.float64)
         self.array = ar
-
-    @staticmethod
-    def parse(s):
-        """
-        Parse string representation back into the DenseVector.
-
-        >>> DenseVector.parse(' [ 0.0,1.0,2.0,  3.0]')
-        DenseVector([0.0, 1.0, 2.0, 3.0])
-        """
-        start = s.find('[')
-        if start == -1:
-            raise ValueError("Array should start with '['.")
-        end = s.find(']')
-        if end == -1:
-            raise ValueError("Array should end with ']'.")
-        s = s[start + 1: end]
-
-        try:
-            values = [float(val) for val in s.split(',') if val]
-        except ValueError:
-            raise ValueError("Unable to parse values from %s" % s)
-        return DenseVector(values)
 
     def __reduce__(self):
         return DenseVector, (self.array.tostring(),)
@@ -417,17 +384,6 @@ class DenseVector(Vector):
         Returns an numpy.ndarray
         """
         return self.array
-
-    def asML(self):
-        """
-        Convert this vector to the new mllib-local representation.
-        This does NOT copy the data; it copies references.
-
-        :return: :py:class:`pyspark.ml.linalg.DenseVector`
-
-        .. versionadded:: 2.0.0
-        """
-        return newlinalg.DenseVector(self.array)
 
     @property
     def values(self):
@@ -578,55 +534,6 @@ class SparseVector(Vector):
             SparseVector,
             (self.size, self.indices.tostring(), self.values.tostring()))
 
-    @staticmethod
-    def parse(s):
-        """
-        Parse string representation back into the SparseVector.
-
-        >>> SparseVector.parse(' (4, [0,1 ],[ 4.0,5.0] )')
-        SparseVector(4, {0: 4.0, 1: 5.0})
-        """
-        start = s.find('(')
-        if start == -1:
-            raise ValueError("Tuple should start with '('")
-        end = s.find(')')
-        if end == -1:
-            raise ValueError("Tuple should end with ')'")
-        s = s[start + 1: end].strip()
-
-        size = s[: s.find(',')]
-        try:
-            size = int(size)
-        except ValueError:
-            raise ValueError("Cannot parse size %s." % size)
-
-        ind_start = s.find('[')
-        if ind_start == -1:
-            raise ValueError("Indices array should start with '['.")
-        ind_end = s.find(']')
-        if ind_end == -1:
-            raise ValueError("Indices array should end with ']'")
-        new_s = s[ind_start + 1: ind_end]
-        ind_list = new_s.split(',')
-        try:
-            indices = [int(ind) for ind in ind_list if ind]
-        except ValueError:
-            raise ValueError("Unable to parse indices from %s." % new_s)
-        s = s[ind_end + 1:].strip()
-
-        val_start = s.find('[')
-        if val_start == -1:
-            raise ValueError("Values array should start with '['.")
-        val_end = s.find(']')
-        if val_end == -1:
-            raise ValueError("Values array should end with ']'.")
-        val_list = s[val_start + 1: val_end].split(',')
-        try:
-            values = [float(val) for val in val_list if val]
-        except ValueError:
-            raise ValueError("Unable to parse values from %s." % s)
-        return SparseVector(size, indices, values)
-
     def dot(self, other):
         """
         Dot product with a SparseVector or 1- or 2-dimensional Numpy array.
@@ -758,17 +665,6 @@ class SparseVector(Vector):
         arr[self.indices] = self.values
         return arr
 
-    def asML(self):
-        """
-        Convert this vector to the new mllib-local representation.
-        This does NOT copy the data; it copies references.
-
-        :return: :py:class:`pyspark.ml.linalg.SparseVector`
-
-        .. versionadded:: 2.0.0
-        """
-        return newlinalg.SparseVector(self.size, self.indices, self.values)
-
     def __len__(self):
         return self.size
 
@@ -878,37 +774,6 @@ class Vectors(object):
         return DenseVector(elements)
 
     @staticmethod
-    def fromML(vec):
-        """
-        Convert a vector from the new mllib-local representation.
-        This does NOT copy the data; it copies references.
-
-        :param vec: a :py:class:`pyspark.ml.linalg.Vector`
-        :return: a :py:class:`pyspark.mllib.linalg.Vector`
-
-        .. versionadded:: 2.0.0
-        """
-        if isinstance(vec, newlinalg.DenseVector):
-            return DenseVector(vec.array)
-        elif isinstance(vec, newlinalg.SparseVector):
-            return SparseVector(vec.size, vec.indices, vec.values)
-        else:
-            raise TypeError("Unsupported vector type %s" % type(vec))
-
-    @staticmethod
-    def stringify(vector):
-        """
-        Converts a vector into a string, which can be recognized by
-        Vectors.parse().
-
-        >>> Vectors.stringify(Vectors.sparse(2, [1], [1.0]))
-        '(2,[1],[1.0])'
-        >>> Vectors.stringify(Vectors.dense([0.0, 1.0]))
-        '[0.0,1.0]'
-        """
-        return str(vector)
-
-    @staticmethod
     def squared_distance(v1, v2):
         """
         Squared distance between two vectors.
@@ -929,23 +794,6 @@ class Vectors(object):
         Find norm of the given vector.
         """
         return _convert_to_vector(vector).norm(p)
-
-    @staticmethod
-    def parse(s):
-        """Parse a string representation back into the Vector.
-
-        >>> Vectors.parse('[2,1,2 ]')
-        DenseVector([2.0, 1.0, 2.0])
-        >>> Vectors.parse(' ( 100,  [0],  [2])')
-        SparseVector(100, {0: 2.0})
-        """
-        if s.find('(') == -1 and s.find('[') != -1:
-            return DenseVector.parse(s)
-        elif s.find('(') != -1:
-            return SparseVector.parse(s)
-        else:
-            raise ValueError(
-                "Cannot find tokens '[' or '(' from the input string.")
 
     @staticmethod
     def zeros(size):
@@ -992,13 +840,6 @@ class Matrix(object):
     def toArray(self):
         """
         Returns its elements in a NumPy ndarray.
-        """
-        raise NotImplementedError
-
-    def asML(self):
-        """
-        Convert this matrix to the new mllib-local representation.
-        This does NOT copy the data; it copies references.
         """
         raise NotImplementedError
 
@@ -1100,17 +941,6 @@ class DenseMatrix(Matrix):
         rowIndices = indices % self.numRows
 
         return SparseMatrix(self.numRows, self.numCols, colPtrs, rowIndices, values)
-
-    def asML(self):
-        """
-        Convert this matrix to the new mllib-local representation.
-        This does NOT copy the data; it copies references.
-
-        :return: :py:class:`pyspark.ml.linalg.DenseMatrix`
-
-        .. versionadded:: 2.0.0
-        """
-        return newlinalg.DenseMatrix(self.numRows, self.numCols, self.values, self.isTransposed)
 
     def __getitem__(self, indices):
         i, j = indices
@@ -1284,18 +1114,6 @@ class SparseMatrix(Matrix):
         densevals = np.ravel(self.toArray(), order='F')
         return DenseMatrix(self.numRows, self.numCols, densevals)
 
-    def asML(self):
-        """
-        Convert this matrix to the new mllib-local representation.
-        This does NOT copy the data; it copies references.
-
-        :return: :py:class:`pyspark.ml.linalg.SparseMatrix`
-
-        .. versionadded:: 2.0.0
-        """
-        return newlinalg.SparseMatrix(self.numRows, self.numCols, self.colPtrs, self.rowIndices,
-                                      self.values, self.isTransposed)
-
     # TODO: More efficient implementation:
     def __eq__(self, other):
         return np.all(self.toArray() == other.toArray())
@@ -1315,51 +1133,6 @@ class Matrices(object):
         Create a SparseMatrix
         """
         return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
-
-    @staticmethod
-    def fromML(mat):
-        """
-        Convert a matrix from the new mllib-local representation.
-        This does NOT copy the data; it copies references.
-
-        :param mat: a :py:class:`pyspark.ml.linalg.Matrix`
-        :return: a :py:class:`pyspark.mllib.linalg.Matrix`
-
-        .. versionadded:: 2.0.0
-        """
-        if isinstance(mat, newlinalg.DenseMatrix):
-            return DenseMatrix(mat.numRows, mat.numCols, mat.values, mat.isTransposed)
-        elif isinstance(mat, newlinalg.SparseMatrix):
-            return SparseMatrix(mat.numRows, mat.numCols, mat.colPtrs, mat.rowIndices,
-                                mat.values, mat.isTransposed)
-        else:
-            raise TypeError("Unsupported matrix type %s" % type(mat))
-
-
-class QRDecomposition(object):
-    """
-    Represents QR factors.
-    """
-    def __init__(self, Q, R):
-        self._Q = Q
-        self._R = R
-
-    @property
-    @since('2.0.0')
-    def Q(self):
-        """
-        An orthogonal matrix Q in a QR decomposition.
-        May be null if not computed.
-        """
-        return self._Q
-
-    @property
-    @since('2.0.0')
-    def R(self):
-        """
-        An upper triangular matrix R in a QR decomposition.
-        """
-        return self._R
 
 
 def _test():
